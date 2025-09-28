@@ -33,14 +33,17 @@ class ANGPTestCharacter : public ACharacter
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FollowCamera;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
-	UTimelineComponent* PushTimeline;
+	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	//UTimelineComponent* PushTimeline;
 	
 	//UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	//UStaticMeshComponent* BoardMesh; 
 	
 protected:
-
+	
+	UPROPERTY(EditAnywhere, Category="Input")
+	UInputAction* BrakeAction;
+	
 	UPROPERTY(EditAnywhere, Category="Input")
 	UInputAction* PushAction;
 	
@@ -62,9 +65,6 @@ protected:
 
 public:
 
-	UPROPERTY(BlueprintReadOnly)
-	bool IsJumping = false;
-
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Pushing")
 	float SpeedBleedRate = 10.f;
 
@@ -73,7 +73,10 @@ public:
 	FTimerHandle PushTimerHandle;
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Pushing")
-	UCurveFloat* PushCurve;
+	UAnimMontage* PushMontage;
+	
+	//UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Pushing")
+	//UCurveFloat* PushCurve;
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Pushing")
 	float PushFrequency = 1.f;
@@ -82,6 +85,12 @@ public:
 	float PushStrength = 400.f;
 
 	//Jump
+	UPROPERTY(BlueprintReadOnly)
+	bool IsJumping = false;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Jump")
+	UAnimMontage* JumpMontage;
+	
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Jump")
 	float MaxJumpHold = 2.f;
 
@@ -99,6 +108,8 @@ protected:
 	/** Initialize input action bindings */
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
+	virtual void Tick(float DeltaSeconds) override;
+
 protected:
 
 	/** Called for movement input */
@@ -106,16 +117,9 @@ protected:
 
 	/** Called for looking input */
 	void Look(const FInputActionValue& Value);
-
+	
 	float GetTurnRate();
-
 	void HandlePush();
-
-	UFUNCTION()
-	void PushUpdate(float alpha);
-
-	virtual void Tick(float DeltaSeconds) override;
-	virtual void BeginPlay() override;
 
 public:
 

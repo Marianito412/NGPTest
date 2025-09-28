@@ -47,7 +47,7 @@ ANGPTestCharacter::ANGPTestCharacter()
 	FollowCamera->bUsePawnControlRotation = false;
 
 	//Create PushTimeline
-	PushTimeline = CreateDefaultSubobject<UTimelineComponent>(TEXT("PushTimeline"));
+	//PushTimeline = CreateDefaultSubobject<UTimelineComponent>(TEXT("PushTimeline"));
 	
 	
 	//BoardMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Board"));
@@ -56,15 +56,6 @@ ANGPTestCharacter::ANGPTestCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
-}
-
-void ANGPTestCharacter::BeginPlay()
-{
-	FOnTimelineFloat OnPushTimelineUpdate;
-	OnPushTimelineUpdate.BindUFunction(this, FName("PushUpdate"));
-	PushTimeline->AddInterpFloat(PushCurve, OnPushTimelineUpdate, FName("PushTrack"));
-	
-	Super::BeginPlay();
 }
 
 void ANGPTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -91,6 +82,15 @@ void ANGPTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	{
 		UE_LOG(LogNGPTest, Error, TEXT("'%s' Failed to find an Enhanced Input component! This template is built to use the Enhanced Input system. If you intend to use the legacy system, then you will need to update this C++ file."), *GetNameSafe(this));
 	}
+}
+
+void ANGPTestCharacter::Tick(float DeltaSeconds)
+{
+	GetCharacterMovement()->MaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed - SpeedBleedRate*DeltaSeconds;
+	UKismetSystemLibrary::PrintString(
+		this, FString::Printf(TEXT("%f"), GetCharacterMovement()->MaxWalkSpeed),
+		true, true, FColor::Cyan, 0, FName("TickSpeed"));
+	Super::Tick(DeltaSeconds);
 }
 
 void ANGPTestCharacter::Move(const FInputActionValue& Value)
@@ -121,19 +121,16 @@ void ANGPTestCharacter::DoMove(float Right, float Forward)
 
 		// get forward vector
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-
-		// add movement
-		//AddMovementInput(ForwardDirection, Forward);
 		
-		if (Right != 0)
+		
+		if (Right != 0.f)
 		{
-			bool IsRight = Right>0;
-			float TurnRate = 1.f; //GetTurnRate();
+			bool IsRight = Right>0.f;
+			float TurnRate = 0.3f;//GetTurnRate();
 			
 			AddControllerYawInput(IsRight ? TurnRate: -TurnRate);
-			AddMovementInput(ForwardDirection, 0.1f);
+			AddMovementInput(ForwardDirection, 1.f);
 		}
-		//AddMovementInput(RightDirection, Right);
 	}
 }
 
@@ -143,48 +140,12 @@ float ANGPTestCharacter::GetTurnRate()
 	float Speed = GetCharacterMovement()->Velocity.Length();
 	float SpeedPercentage = Speed/GetCharacterMovement()->MaxWalkSpeed;
 	return FMath::Clamp(0.5 + 0.5*(1-SpeedPercentage), 0.f, 1.f);
-	
-}
-
-void ANGPTestCharacter::HandlePush()
-{
-
-	PushTimeline->PlayFromStart();
-	
-	GetCharacterMovement()->MaxWalkSpeed = 800;
-	UE_LOG(LogTemp, Warning, TEXT("Push to max speed: %f"), GetCharacterMovement()->MaxWalkSpeed);
-	UKismetSystemLibrary::PrintString(this, "Push");
-}
-
-void ANGPTestCharacter::PushUpdate(float alpha)
-{
-	const FRotator Rotation = GetController()->GetControlRotation();
-	const FRotator YawRotation(0, Rotation.Yaw, 0);
-	
-	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	AddMovementInput(ForwardDirection);
-}
-
-void ANGPTestCharacter::Tick(float DeltaSeconds)
-{
-
-	//Bleed extra speed
-	if (GetCharacterMovement()->MaxWalkSpeed >= 600)
-	{
-		GetCharacterMovement()->MaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed - SpeedBleedRate*DeltaSeconds;
-		UKismetSystemLibrary::PrintString(
-			this, FString::Printf(TEXT("%f"), GetCharacterMovement()->MaxWalkSpeed),
-			true, true, FColor::Cyan, 0, FName("TickSpeed"));		
-	}
 }
 
 void ANGPTestCharacter::DoLook(float Yaw, float Pitch)
 {
 	if (GetController() != nullptr)
 	{
-		// add yaw and pitch input to controller
-		//AddControllerYawInput(Yaw);
-		//AddControllerPitchInput(Pitch);
 		CameraBoom->AddRelativeRotation(FRotator(-1*Pitch, Yaw, 0.f));
 	}
 }
@@ -208,9 +169,16 @@ void ANGPTestCharacter::JumpRelease(const FInputActionInstance& ValueInstance)
 	IsJumping = false;
 }
 
+void ANGPTestCharacter::HandlePush()
+{
+	float Speed = GetCharacterMovement()->Velocity.Length();
+	GetMesh()->GetAnimInstance()->Montage_Play(PushMontage);
+	//GetCharacterMovement()->MaxWalkSpeed = 800;
+}
+
 void ANGPTestCharacter::PushPress(const FInputActionValue& Value)
 {
-	GetWorld()->GetTimerManager().SetTimer(PushTimerHandle, this, &ANGPTestCharacter::HandlePush, PushFrequency, true);
+	GetWorld()->GetTimerManager().SetTimer(PushTimerHandle, this, &ANGPTestCharacter::HandlePush, PushFrequency, true, 0.f);
 }
 
 void ANGPTestCharacter::PushRelease(const FInputActionInstance& ValueInstance)
