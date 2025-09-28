@@ -20,6 +20,9 @@ class ANGPTestPlayerController : public APlayerController
 	
 protected:
 
+	UPROPERTY(BlueprintReadOnly, EditAnywhere)
+	TSubclassOf<UUserWidget> HUDWidgetClass;
+	
 	/** Input Mapping Contexts */
 	UPROPERTY(EditAnywhere, Category ="Input|Input Mappings")
 	TArray<UInputMappingContext*> DefaultMappingContexts;

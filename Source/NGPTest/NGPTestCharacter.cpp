@@ -46,14 +46,6 @@ ANGPTestCharacter::ANGPTestCharacter()
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
 
-	//Create PushTimeline
-	//PushTimeline = CreateDefaultSubobject<UTimelineComponent>(TEXT("PushTimeline"));
-	
-	
-	//BoardMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Board"));
-	//BoardMesh->SetupAttachment(RootComponent);
-	//GetMesh()->SetupAttachment(BoardMesh);
-
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
 }
@@ -62,9 +54,13 @@ void ANGPTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 {
 	// Set up action bindings
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(PlayerInputComponent)) {
+
+		//Braking
+		EnhancedInputComponent->BindAction(BrakeAction, ETriggerEvent::Started, this, &ANGPTestCharacter::BrakePress);
+		EnhancedInputComponent->BindAction(BrakeAction, ETriggerEvent::Completed, this, &ANGPTestCharacter::BrakeRelease);
 		
 		// Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ANGPTestCharacter::JumpLoad);
+		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ANGPTestCharacter::JumpPress);
 		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ANGPTestCharacter::JumpRelease);
 
 		//Pushing
@@ -73,7 +69,6 @@ void ANGPTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		
 		// Moving
 		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ANGPTestCharacter::Move);
-		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &ANGPTestCharacter::Look);
 
 		// Looking
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &ANGPTestCharacter::Look);
@@ -84,75 +79,23 @@ void ANGPTestCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	}
 }
 
-void ANGPTestCharacter::Tick(float DeltaSeconds)
+//Braking
+void ANGPTestCharacter::BrakePress(const FInputActionValue& Value)
 {
-	GetCharacterMovement()->MaxWalkSpeed = GetCharacterMovement()->MaxWalkSpeed - SpeedBleedRate*DeltaSeconds;
-	UKismetSystemLibrary::PrintString(
-		this, FString::Printf(TEXT("%f"), GetCharacterMovement()->MaxWalkSpeed),
-		true, true, FColor::Cyan, 0, FName("TickSpeed"));
-	Super::Tick(DeltaSeconds);
+	SpeedBleedRate = BrakeSpeedBleedRate;
+	GetCharacterMovement()->BrakingDecelerationWalking += BrakeDeceleration;  
 }
 
-void ANGPTestCharacter::Move(const FInputActionValue& Value)
+void ANGPTestCharacter::BrakeRelease(const FInputActionValue& Value)
 {
-	// input is a Vector2D
-	FVector2D MovementVector = Value.Get<FVector2D>();
-
-	// route the input
-	DoMove(MovementVector.X, MovementVector.Y);
+	SpeedBleedRate = IdleSpeedBleedRate;
+	GetCharacterMovement()->BrakingDecelerationWalking -= BrakeDeceleration;
 }
 
-void ANGPTestCharacter::Look(const FInputActionValue& Value)
+//Jumping
+void ANGPTestCharacter::JumpPress(const FInputActionValue& Value)
 {
-	// input is a Vector2D
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
-
-	// route the input
-	DoLook(LookAxisVector.X, LookAxisVector.Y);
-}
-
-void ANGPTestCharacter::DoMove(float Right, float Forward)
-{
-	if (GetController() != nullptr)
-	{
-		// find out which way is forward
-		const FRotator Rotation = GetController()->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
-
-		// get forward vector
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-		
-		
-		if (Right != 0.f)
-		{
-			bool IsRight = Right>0.f;
-			float TurnRate = 0.3f;//GetTurnRate();
-			
-			AddControllerYawInput(IsRight ? TurnRate: -TurnRate);
-			AddMovementInput(ForwardDirection, 1.f);
-		}
-	}
-}
-
-float ANGPTestCharacter::GetTurnRate()
-{
-	
-	float Speed = GetCharacterMovement()->Velocity.Length();
-	float SpeedPercentage = Speed/GetCharacterMovement()->MaxWalkSpeed;
-	return FMath::Clamp(0.5 + 0.5*(1-SpeedPercentage), 0.f, 1.f);
-}
-
-void ANGPTestCharacter::DoLook(float Yaw, float Pitch)
-{
-	if (GetController() != nullptr)
-	{
-		CameraBoom->AddRelativeRotation(FRotator(-1*Pitch, Yaw, 0.f));
-	}
-}
-
-void ANGPTestCharacter::JumpLoad(const FInputActionValue& Value)
-{
-	IsJumping = true;
+	IsJumpLoading = true;
 }
 
 void ANGPTestCharacter::JumpRelease(const FInputActionInstance& ValueInstance)
@@ -162,18 +105,32 @@ void ANGPTestCharacter::JumpRelease(const FInputActionInstance& ValueInstance)
 		MinJumpZSpeed
 		+ FMath::Clamp(Time / MaxJumpHold, 0.f, 1.f)
 		* (MaxJumpZSpeed - MinJumpZSpeed);
-	UKismetSystemLibrary::PrintString(
-			this, FString::Printf(TEXT("%f"), GetCharacterMovement()->JumpZVelocity),
-			true, true, FColor::Cyan, 3, FName("JumpSpeed"));
 	Jump();
-	IsJumping = false;
+	IsJumpLoading = false;
 }
 
+//Pushing
 void ANGPTestCharacter::HandlePush()
 {
 	float Speed = GetCharacterMovement()->Velocity.Length();
 	GetMesh()->GetAnimInstance()->Montage_Play(PushMontage);
-	//GetCharacterMovement()->MaxWalkSpeed = 800;
+}
+
+void ANGPTestCharacter::ApplyPush(float Scale)
+{
+	const FRotator Rotation = GetController()->GetControlRotation();
+	const FRotator YawRotation(0, Rotation.Yaw, 0);
+	
+	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	AddMovementInput(ForwardDirection, Scale);
+
+	GetCharacterMovement()->MaxWalkSpeed = MaxPushSpeed;
+}
+
+void ANGPTestCharacter::CapMaxSpeed()
+{
+	float CurrentSpeed = GetCharacterMovement()->Velocity.Size();
+	GetCharacterMovement()->MaxWalkSpeed = CurrentSpeed;
 }
 
 void ANGPTestCharacter::PushPress(const FInputActionValue& Value)
@@ -184,5 +141,70 @@ void ANGPTestCharacter::PushPress(const FInputActionValue& Value)
 void ANGPTestCharacter::PushRelease(const FInputActionInstance& ValueInstance)
 {
 	GetWorld()->GetTimerManager().ClearTimer(PushTimerHandle);
+	GetMesh()->GetAnimInstance()->StopAllMontages(0.05f);
 }
 
+//Movement (Leaning)
+void ANGPTestCharacter::Move(const FInputActionValue& Value)
+{
+
+	if (!GetController())
+	{
+		UE_LOG(LogNGPTest, Warning, TEXT("NGPTestCharacter::Move: Failed to find controller"));
+		return;
+	}
+
+	// input is a Vector2D
+	FVector2D MovementVector = Value.Get<FVector2D>();
+	
+	// find out which way is forward
+	const FRotator Rotation = GetController()->GetControlRotation();
+	const FRotator YawRotation(0, Rotation.Yaw, 0);
+
+	// get forward vector
+	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	
+	if (MovementVector.X != 0.f)
+	{
+		bool IsRight = MovementVector.X>0.f;
+		float TurnRate = GetTurnRate();
+			
+		AddControllerYawInput(IsRight ? TurnRate: -TurnRate);
+		AddMovementInput(ForwardDirection, 1.f);
+	}
+}
+
+//Looking (Camera movement)
+void ANGPTestCharacter::Look(const FInputActionValue& Value)
+{
+	// input is a Vector2D
+	FVector2D LookAxisVector = Value.Get<FVector2D>();
+
+	if (!GetController())
+	{
+		UE_LOG(LogNGPTest, Warning, TEXT("NGPTestCharacter::Move: Failed to find controller"));
+		return;
+	}
+
+	CameraBoom->AddRelativeRotation(FRotator(LookAxisVector.Y, LookAxisVector.X, 0.f));
+}
+
+
+float ANGPTestCharacter::GetTurnRate()
+{
+	if (GetCharacterMovement()->IsFalling()) return 0.8;
+	
+	float Speed = GetCharacterMovement()->Velocity.Length();
+	float SpeedPercentage = Speed/GetCharacterMovement()->MaxWalkSpeed;
+	return FMath::Clamp(0.5 + 0.5*(1-SpeedPercentage), 0.f, 1.f);
+}
+
+void ANGPTestCharacter::Tick(float DeltaSeconds)
+{
+	float MaxSpeed = GetCharacterMovement()->MaxWalkSpeed; 
+	if (MaxSpeed<=0) return Super::Tick(DeltaSeconds);
+	
+	GetCharacterMovement()->MaxWalkSpeed = MaxSpeed - SpeedBleedRate*DeltaSeconds;
+	
+	Super::Tick(DeltaSeconds);
+}

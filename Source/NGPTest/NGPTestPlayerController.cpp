@@ -13,6 +13,16 @@ void ANGPTestPlayerController::BeginPlay()
 {
 	Super::BeginPlay();
 
+	if (IsValid(HUDWidgetClass))
+	{
+		UUserWidget* HUD = CreateWidget<UUserWidget>(this, HUDWidgetClass);
+		HUD->AddToViewport();
+	}
+	else
+	{
+		UE_LOG(LogNGPTest, Warning, TEXT("ANGPTestPlayerController::BeginPlay: Failed to create player HUD due to invalid class"))
+	}
+	
 	// only spawn touch controls on local player controllers
 	if (SVirtualJoystick::ShouldDisplayTouchInterface() && IsLocalPlayerController())
 	{
